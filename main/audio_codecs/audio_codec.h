@@ -15,6 +15,7 @@
 #define AUDIO_CODEC_DMA_DESC_NUM 6
 // 定义音频编解码器的DMA帧数
 #define AUDIO_CODEC_DMA_FRAME_NUM 240
+#define AUDIO_CODEC_DEFAULT_MIC_GAIN 30.0
 
 /**
  * 音频编解码器类，用于管理音频输入输出的配置和数据处理
