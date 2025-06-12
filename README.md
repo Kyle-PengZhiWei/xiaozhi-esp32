@@ -1,4 +1,4 @@
-# 负熵引擎-基础款聊天机器人 （EntroDyn-Basics-ChatBox）
+# 负熵引擎-基础款聊天机器人 （EntroDyn-Basics-ChatBox）.
 # An MCP-based Chatbot | 一个基于 MCP 的聊天机器人
 
 （中文 | [English](README_en.md) | [日本語](README_ja.md)）
