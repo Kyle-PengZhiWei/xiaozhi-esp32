@@ -34,17 +34,22 @@ enum AecMode {
     kAecOnServerSide,
 };
 
+/**
+ * @brief 表示设备当前的状态。
+ *
+ * 该枚举定义了设备可能处于的各种状态，包括启动、配置 Wi-Fi、空闲、连接中、监听、说话、升级等。
+ */
 enum DeviceState {
-    kDeviceStateUnknown,
-    kDeviceStateStarting,
-    kDeviceStateWifiConfiguring,
-    kDeviceStateIdle,
-    kDeviceStateConnecting,
-    kDeviceStateListening,
-    kDeviceStateSpeaking,
-    kDeviceStateUpgrading,
-    kDeviceStateActivating,
-    kDeviceStateFatalError
+    kDeviceStateUnknown,        /**< 设备状态未知 */
+    kDeviceStateStarting,       /**< 设备正在启动 */
+    kDeviceStateWifiConfiguring,/**< 设备正在配置 Wi-Fi */
+    kDeviceStateIdle,           /**< 设备空闲 */
+    kDeviceStateConnecting,     /**< 设备正在连接到网络或服务 */
+    kDeviceStateListening,      /**< 设备正在监听输入（例如语音指令） */
+    kDeviceStateSpeaking,       /**< 设备正在输出音频（例如语音反馈） */
+    kDeviceStateUpgrading,      /**< 设备正在进行固件升级 (OTA) */
+    kDeviceStateActivating,     /**< 设备正在激活过程中 */
+    kDeviceStateFatalError      /**< 设备发生了致命错误，需要人工干预 */
 };
 
 #define OPUS_FRAME_DURATION_MS 60
