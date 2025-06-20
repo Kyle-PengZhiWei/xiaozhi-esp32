@@ -40,20 +40,22 @@ enum AecMode {
  * 该枚举定义了设备可能处于的各种状态，包括启动、配置 Wi-Fi、空闲、连接中、监听、说话、升级等。
  */
 enum DeviceState {
-    kDeviceStateUnknown,        /**< 设备状态未知 */
-    kDeviceStateStarting,       /**< 设备正在启动 */
-    kDeviceStateWifiConfiguring,/**< 设备正在配置 Wi-Fi */
-    kDeviceStateIdle,           /**< 设备空闲 */
-    kDeviceStateConnecting,     /**< 设备正在连接到网络或服务 */
-    kDeviceStateListening,      /**< 设备正在监听输入（例如语音指令） */
-    kDeviceStateSpeaking,       /**< 设备正在输出音频（例如语音反馈） */
-    kDeviceStateUpgrading,      /**< 设备正在进行固件升级 (OTA) */
-    kDeviceStateActivating,     /**< 设备正在激活过程中 */
-    kDeviceStateFatalError      /**< 设备发生了致命错误，需要人工干预 */
+    kDeviceStateUnknown,
+    kDeviceStateStarting,
+    kDeviceStateWifiConfiguring,
+    kDeviceStateIdle,
+    kDeviceStateConnecting,
+    kDeviceStateListening,
+    kDeviceStateSpeaking,
+    kDeviceStateUpgrading,
+    kDeviceStateActivating,
+    kDeviceStateAudioTesting,
+    kDeviceStateFatalError
 };
 
 #define OPUS_FRAME_DURATION_MS 60
 #define MAX_AUDIO_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)
+#define AUDIO_TESTING_MAX_DURATION_MS 10000
 
 class Application {
 public:
@@ -116,6 +118,7 @@ private:
     std::list<AudioStreamPacket> audio_send_queue_;
     std::list<AudioStreamPacket> audio_decode_queue_;
     std::condition_variable audio_decode_cv_;
+    std::list<AudioStreamPacket> audio_testing_queue_;
 
     // 新增：用于维护音频包的timestamp队列
     std::list<uint32_t> timestamp_queue_;
@@ -139,6 +142,8 @@ private:
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();
+    void EnterAudioTestingMode();
+    void ExitAudioTestingMode();
 };
 
 #endif // _APPLICATION_H_
