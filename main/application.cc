@@ -598,48 +598,62 @@ void Application::Start() {
             ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
         }
     });
-    bool protocol_started = protocol_->Start();
-
-    audio_debugger_ = std::make_unique<AudioDebugger>();
-    audio_processor_->Initialize(codec);
-    audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
-                ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
-                return;
-            }
+// 启动协议栈，protocol_->Start()通常会建立网络连接等操作
+bool protocol_started = protocol_->Start();
+// 创建音频调试器实例（用于后续的音频数据处理和调试）
+audio_debugger_ = std::make_unique<AudioDebugger>();
+// 初始化音频处理器，传入编解码器对象
+audio_processor_->Initialize(codec);
+// 设置音频输出回调函数，当有音频数据需要输出时会被调用
+audio_processor_->OnOutput([this](std::vector<int16_t>&& data) {
+    // 检查音频发送队列是否已满
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
+            // 队列已满，丢弃最新的音频包并记录警告日志
+            ESP_LOGW(TAG, "Too many audio packets in queue, drop the newest packet");
+            return;
         }
-        background_task_->Schedule([this, data = std::move(data)]() mutable {
-            opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
-                AudioStreamPacket packet;
-                packet.payload = std::move(opus);
-#ifdef CONFIG_USE_SERVER_AEC
-                {
-                    std::lock_guard<std::mutex> lock(timestamp_mutex_);
-                    if (!timestamp_queue_.empty()) {
-                        packet.timestamp = timestamp_queue_.front();
-                        timestamp_queue_.pop_front();
-                    } else {
-                        packet.timestamp = 0;
-                    }
-
-                    if (timestamp_queue_.size() > 3) { // 限制队列长度3
-                        timestamp_queue_.pop_front(); // 该包发送前先出队保持队列长度
-                        return;
-                    }
+    }
+    // 将音频处理任务调度到后台线程执行
+    background_task_->Schedule([this, data = std::move(data)]() mutable {
+        // 使用Opus编码器对音频数据进行编码
+        opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
+            // 创建音频流数据包
+            AudioStreamPacket packet;
+            packet.payload = std::move(opus);  // 存储编码后的音频数据
+#ifdef CONFIG_USE_SERVER_AEC  // 如果启用了服务器端AEC（回声消除）
+            {
+                // 获取时间戳锁，确保线程安全
+                std::lock_guard<std::mutex> lock(timestamp_mutex_);
+                // 从时间戳队列获取对应的时间戳
+                if (!timestamp_queue_.empty()) {
+                    packet.timestamp = timestamp_queue_.front();
+                    timestamp_queue_.pop_front();  // 移除已使用的时间戳
+                } else {
+                    packet.timestamp = 0;  // 默认时间戳为0
                 }
+                // 限制时间戳队列长度为3
+                if (timestamp_queue_.size() > 3) {
+                    timestamp_queue_.pop_front();  // 超过长度则移除最旧的时间戳
+                }
+            }
 #endif
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
-                    ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
-                    audio_send_queue_.pop_front();
-                }
-                audio_send_queue_.emplace_back(std::move(packet));
-                xEventGroupSetBits(event_group_, SEND_AUDIO_EVENT);
-            });
+            // 获取互斥锁，保护音频发送队列的访问
+            std::lock_guard<std::mutex> lock(mutex_);
+            // 再次检查音频发送队列是否已满
+            if (audio_send_queue_.size() >= MAX_AUDIO_PACKETS_IN_QUEUE) {
+                // 队列已满，丢弃最早的音频包并记录警告日志
+                ESP_LOGW(TAG, "Too many audio packets in queue, drop the oldest packet");
+                audio_send_queue_.pop_front();  // 移除最早的包
+            }
+            // 将音频数据包添加到发送队列末尾
+            audio_send_queue_.emplace_back(std::move(packet));
+            // 触发发送音频事件，通知其他组件有新的音频数据需要处理
+            xEventGroupSetBits(event_group_, SEND_AUDIO_EVENT);
         });
     });
+});
     audio_processor_->OnVadStateChange([this](bool speaking) {
         if (device_state_ == kDeviceStateListening) {
             Schedule([this, speaking]() {
@@ -719,25 +733,29 @@ void Application::Start() {
 }
 
 void Application::OnClockTimer() {
+    // 增加时钟滴答计数器
     clock_ticks_++;
 
+    // 获取显示设备实例并更新状态栏
     auto display = Board::GetInstance().GetDisplay();
     display->UpdateStatusBar();
 
-    // Print the debug info every 10 seconds
+    // 每10秒打印一次调试信息
     if (clock_ticks_ % 10 == 0) {
-        // SystemInfo::PrintTaskCpuUsage(pdMS_TO_TICKS(1000));
-        // SystemInfo::PrintTaskList();
+        // 打印堆内存统计信息（每10秒）
         SystemInfo::PrintHeapStats();
 
-        // If we have synchronized server time, set the status to clock "HH:MM" if the device is idle
+        // 如果已经同步了服务器时间，并且设备处于空闲状态
         if (ota_.HasServerTime()) {
             if (device_state_ == kDeviceStateIdle) {
+                // 调度一个任务来显示当前时间作为状态信息
                 Schedule([this]() {
-                    // Set status to clock "HH:MM"
-                    time_t now = time(NULL);
+                    // 设置状态为时钟格式"HH:MM"
+                    time_t now = time(NULL);  // 获取当前时间
                     char time_str[64];
+                    // 格式化时间为"HH:MM"格式
                     strftime(time_str, sizeof(time_str), "%H:%M  ", localtime(&now));
+                    // 更新显示设备的状态栏时间信息
                     Board::GetInstance().GetDisplay()->SetStatus(time_str);
                 });
             }
